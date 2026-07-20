@@ -1,0 +1,95 @@
+# Unitree Skill Wash Dishes
+
+name: "wash-dishes"
+version: "0.1.0"
+description: "Wash dishes at the kitchen sink — from soak to dry rack"
+status: "scaffolding"
+
+# Skill metadata following Unitree SDK skill structure
+# Hardware-independent definition — designed for any bipedal robot
+# with two arms and grasp capability
+
+metadata:
+  skill_id: "village.dishes.wash"
+  author: "BriviOS Village Skills"
+  license: "Apache-2.0"
+  tags: ["kitchen", "dishes", "cleaning", "village"]
+
+# Prerequisites: what the robot must already know
+prerequisites:
+  skills:
+    - "core.grasp"           # Must be able to grip objects
+    - "core.stand_at_counter" # Must be able to stand at sink height
+    - "core.faucet_operate"   # Must be able to turn faucet on/off
+  tools:
+    - "sponge"
+    - "dish_soap"
+    - "dish_rack"
+    - "drying_towel"
+
+# Environmental requirements
+environment:
+  workspace: "kitchen_sink_area"
+  surface_height: "90cm"   # Standard counter height
+  constraints:
+    - "no_slip_floor"
+    - "clear_path_to_sink"
+
+# Task decomposition — the skill broken into teachable subtasks
+tasks:
+  - id: "soak"
+    description: "Fill sink with warm soapy water and submerge dishes"
+    duration_estimate: "60s"
+    safety:
+      - "water_temp_below_50C"
+      - "no_electrical_near_water"
+
+  - id: "scrub"
+    description: "Scrub each dish with sponge until clean"
+    input:
+      - "dish_object"
+      - "sponge_grasped"
+    outputs:
+      - "clean_dish"
+    constraints:
+      - "force_limit_5N"   # Don't break dishes
+      - "grip_adaptive"     # Adjust grip to dish shape
+
+  - id: "rinse"
+    description: "Rinse each dish under running water"
+    dependency: "scrub"
+    safety:
+      - "clear_vision_of_dish"  # Must be able to see what's being rinsed
+
+  - id: "dry_rack"
+    description: "Place rinsed dish in drying rack"
+    dependency: "rinse"
+    placement:
+      position: "drying_rack"
+      orientation: "tilted_for_drainage"
+
+  - id: "cleanup"
+    description: "Drain sink, wipe counter, put away sponge"
+    dependency: "dry_rack"
+    final: true
+
+# Failure modes and recovery
+failure_modes:
+  - condition: "dish_dropped"
+    action: "STOP_RINSING | DRAIN_SINK | RETRIEVE_DROPPED_ITEM"
+    recovery: "inspect_dish_for_damage | if_damaged_discard | else_rewash"
+
+  - condition: "water_overflow"
+    action: "IMMEDIATE_STOP | CLOSE_FAUCET"
+    recovery: "human_inspection_required"
+
+  - condition: "force_limit_exceeded"
+    action: "RELAX_GRIP | PAUSE"
+    recovery: "human_acknowledgment_required"
+
+# Learning from Demonstration (LfD) configuration
+lfd:
+  demonstration_source: "village_master"
+  required_demonstrations: 3
+  data_format: "video + joint_angles + force_profile"
+  learning_algorithm: "behavior_cloning + reinforcement_learning"
